@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simple Multiplayer-like Game Demo</title>
+<style>
+  body, html {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000;
+    font-family: Arial, sans-serif;
+    color: white;
+    user-select: none;
+  }
+  #startScreen {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  #gameArea {
+    display: none;
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+  }
+  #playerCube {
+    position: absolute;
+    width: 50px; height: 50px;
+    background: white;
+    top: 50%; left: 50%;
+    margin-left: -25px; margin-top: -25px;
+    border-radius: 4px;
+  }
+  #playerNameTag {
+    position: absolute;
+    color: white;
+    font-weight: bold;
+    white-space: nowrap;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+  #chatInput {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 4px;
+    border: none;
+  }
+  #chatLog {
+    position: absolute;
+    bottom: 50px;
+    left: 10px;
+    width: 250px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 14px;
+    background: rgba(0,0,0,0.5);
+    padding: 5px;
+    border-radius: 4px;
+  }
+  #arrowKeys {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(255 255 255 / 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    user-select: none;
+  }
+  #arrowKeys span {
+    display: inline-block;
+    margin: 3px;
+    padding: 6px 10px;
+    border: 1px solid white;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+  }
+  #arrowKeys .pressed {
+    background-color: white;
+    color: black;
+  }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h2>Enter Your Name</h2>
+  <input id="nameInput" placeholder="Your name" autocomplete="off" />
+  <br /><br />
+  <button id="startBtn">Start Game</button>
+</div>
+
+<div id="gameArea">
+  <div id="playerCube">
+    <div id="playerNameTag"></div>
+  </div>
+  <input id="chatInput" placeholder="Type message & press Enter" autocomplete="off" />
+  <div id="chatLog"></div>
+  <div id="arrowKeys">
+    <span id="leftKey">&larr;</span>
+    <span id="upKey">&uarr;</span>
+    <span id="rightKey">&rarr;</span>
+    <span id="downKey">&darr;</span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const startScreen = document.getElementById('startScreen');
+  const nameInput = document.getElementById('nameInput');
+  const startBtn = document.getElementById('startBtn');
+  const gameArea = document.getElementById('gameArea');
+  const playerCube = document.getElementById('playerCube');
+  const playerNameTag = document.getElementById('playerNameTag');
+  const chatInput = document.getElementById('chatInput');
+  const chatLog = document.getElementById('chatLog');
+
+  const arrowKeys = {
+    left: document.getElementById('leftKey'),
+    up: document.getElementById('upKey'),
+    right: document.getElementById('rightKey'),
+    down: document.getElementById('downKey'),
+  };
+
+  let playerName = '';
+  let pos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  let speed = 4;
+  let keysPressed = {};
+  let chatTimeout = null;
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  startBtn.onclick = () => {
+    const val = nameInput.value.trim();
+    if (!val) {
+      alert('Please enter a name!');
+      return;
+    }
+    playerName = val;
+    playerNameTag.textContent = playerName;
+    startScreen.style.display = 'none';
+    gameArea.style.display = 'block';
+    chatInput.focus();
+    updatePosition(0, 0); // initial position
+    requestAnimationFrame(gameLoop);
+  };
+
+  // Movement controls
+  window.addEventListener('keydown', (e) => {
+    if(['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      keysPressed[e.key] = true;
+      updateArrowKeys();
+    }
+    if(e.key === 'Enter' && document.activeElement === chatInput) {
+      sendChat();
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if(['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      delete keysPressed[e.key];
+      updateArrowKeys();
+    }
+  });
+
+  function updateArrowKeys() {
+    arrowKeys.left.classList.toggle('pressed', !!keysPressed['ArrowLeft']);
+    arrowKeys.up.classList.toggle('pressed', !!keysPressed['ArrowUp']);
+    arrowKeys.right.classList.toggle('pressed', !!keysPressed['ArrowRight']);
+    arrowKeys.down.classList.toggle('pressed', !!keysPressed['ArrowDown']);
+  }
+
+  // Update player position based on keys pressed
+  function gameLoop() {
+    let dx = 0, dy = 0;
+    if(keysPressed['ArrowLeft']) dx -= speed;
+    if(keysPressed['ArrowRight']) dx += speed;
+    if(keysPressed['ArrowUp']) dy -= speed;
+    if(keysPressed['ArrowDown']) dy += speed;
+
+    if(dx !== 0 || dy !== 0) {
+      updatePosition(dx, dy);
+    }
+    requestAnimationFrame(gameLoop);
+  }
+
+  function updatePosition(dx, dy) {
+    pos.x = clamp(pos.x + dx, 25, window.innerWidth - 25);
+    pos.y = clamp(pos.y + dy, 25, window.innerHeight - 25);
+    playerCube.style.left = pos.x + 'px';
+    playerCube.style.top = pos.y + 'px';
+  }
+
+  // Chat system
+  chatInput.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') {
+      sendChat();
+    }
+  });
+
+  function sendChat() {
+    const msg = chatInput.value.trim();
+    if(!msg) return;
+    addChatMessage(playerName + ': ' + msg);
+    showChatBubble(msg);
+    chatInput.value = '';
+  }
+
+  function addChatMessage(text) {
+    const msgDiv = document.createElement('div');
+    msgDiv.textContent = text;
+    chatLog.appendChild(msgDiv);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  function showChatBubble(msg) {
+    playerNameTag.textContent = playerName + ': ' + msg;
+    if(chatTimeout) clearTimeout(chatTimeout);
+    chatTimeout = setTimeout(() => {
+      playerNameTag.textContent = playerName;
+    }, 2000);
+  }
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    pos.x = clamp(pos.x, 25, window.innerWidth - 25);
+    pos.y = clamp(pos.y, 25, window.innerHeight - 25);
+    updatePosition(0, 0);
+  });
+})();
+</script>
+
+</body>
+</html>
